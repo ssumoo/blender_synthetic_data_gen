@@ -113,8 +113,10 @@ def darwin_to_coco(item: DarwinFile) -> Tuple[bool, Optional[Dict], Optional[Lis
     image = {
         "id": item.img_id,
         "file_name": str(item.image_root / darwin_ann["image"]["filename"]),
-        "width": darwin_ann["image"]["width"],
-        "height": darwin_ann["image"]["height"],
+        # "width": darwin_ann["image"]["width"],
+        # "height": darwin_ann["image"]["height"],
+        "width": darwin_ann["image"]["width"],  # TODO: this is actually wrong, but it's flipped to accommodate h/w bug form blender
+        "height": darwin_ann["image"]["height"],  # TODO: this is actually wrong, but it's flipped to accommodate h/w bug form blender
     }
     # 0th item always corresponds to the football field
     coco_anns = [{

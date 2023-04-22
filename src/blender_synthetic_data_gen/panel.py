@@ -411,8 +411,8 @@ class TakeRenderedImages(bpy.types.Operator):
         ann = {
             "image": {
                 "filename": file_path.name,
-                "height": context.scene.render.resolution_x,
-                "width": context.scene.render.resolution_y,
+                "height": context.scene.render.resolution_y,
+                "width": context.scene.render.resolution_x,
             },
             "annotations": []
         }
