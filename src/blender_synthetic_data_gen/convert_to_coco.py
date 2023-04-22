@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import logging
 import traceback
+import numpy as np
 import typer
 
 
@@ -142,8 +143,8 @@ def darwin_to_coco(item: DarwinFile) -> Tuple[bool, Optional[Dict], Optional[Lis
         seen_names.append(item_name)
         corner_idx = item.mapped_names_to_idx[corner_name]
 
-        kpt_x = 0.5 * a["bounding_box"]["w"] + a["bounding_box"]["x"]
-        kpt_y = 0.5 * a["bounding_box"]["h"] + a["bounding_box"]["y"]
+        kpt_x = np.clip(0.5 * a["bounding_box"]["w"] + a["bounding_box"]["x"], 0.0, image["width"])
+        kpt_y = np.clip(0.5 * a["bounding_box"]["h"] + a["bounding_box"]["y"], 0.0, image["height"])
         keypoints[corner_idx] = [kpt_x, kpt_y, 2]
     coco_anns[0]["keypoints"] = [i for ii in keypoints for i in ii]
 
