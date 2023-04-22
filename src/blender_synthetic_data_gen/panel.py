@@ -8,6 +8,38 @@ import bpy
 REPLACE_TOKEN = "{stem}"
 
 
+def hsva_to_rgba(hsva):
+    h = hsva[0]
+    s = hsva[1]
+    v = hsva[2]
+    a = hsva[3]
+    if not s:  # S == 0
+        # achromatic (grey)
+        # R = G = B = V
+        return np.array([v, v, v, a])
+
+    h = h * 60
+    i = int(h)  # round down to int. in C its floor()
+    f = h - i  # factorial part of H
+    p = v * (1 - s)
+    q = v * (1 - s * f)
+    t = v * (1 - s * (1 - f))
+
+    if i == 0:
+        r, g, b = v, t, p
+    elif i == 1:
+        r, g, b = q, v, p
+    elif i == 2:
+        r, g, b = p, v, t
+    elif i == 3:
+        r, g, b = p, q, v
+    elif i == 4:
+        r, g, b = t, p, v
+    else:  # 5
+        r, g, b = v, p, q
+    return np.array([r, g, b, a])
+
+
 def copy_objects(from_col, to_col, linked, dupe_lut):
     for o in from_col.objects:
         dupe = o.copy()
@@ -138,6 +170,8 @@ class GenerationSettings(bpy.types.PropertyGroup):
 
     camera_min_z: bpy.props.FloatProperty(name="camera_min_z", default=2.0, min=0)
     camera_max_z: bpy.props.FloatProperty(name="camera_max_z", default=50.0, min=0)
+    focal_len_min: bpy.props.FloatProperty(name="focal_len_min", default=20.0, min=0)
+    focal_len_max: bpy.props.FloatProperty(name="focal_len_max", default=45.0, min=0)
 
     save_dir: bpy.props.StringProperty(name="save_dir", subtype="FILE_PATH")
     save_format: bpy.props.StringProperty(name="save_format", default=f"img_{REPLACE_TOKEN}.png")
@@ -190,8 +224,8 @@ class TakeRenderedImages(bpy.types.Operator):
             [args.max_field_hue, args.max_field_sat, args.max_field_val],
         )
         stripe_base_intensity = np.random.uniform(0.8, 1.0)
-        stripe_x_intensity = np.random.uniform(0.2, 0.4)
-        stripe_y_intensity = np.random.uniform(0.2, 0.4)
+        stripe_x_intensity = np.random.uniform(0.1, 0.2)
+        stripe_y_intensity = np.random.uniform(0.1, 0.2)
         if np.random.binomial(n=1, p=0.5):
             x_wave_scale = np.random.uniform(1.5, 5.0)
         else:
@@ -272,10 +306,10 @@ class TakeRenderedImages(bpy.types.Operator):
             [args.min_player_skin_hue, args.min_player_skin_sat, args.min_player_skin_val],
             [args.max_player_skin_hue, args.max_player_skin_sat, args.max_player_skin_val],
         )
-        bpy.data.materials[f"player_shirt_{team_name}"].node_tree.nodes["ColorRamp"].color_ramp.elements[1].color = shirt_hsva
-        bpy.data.materials[f"player_shorts_{team_name}"].node_tree.nodes["ColorRamp"].color_ramp.elements[1].color = shorts_hsva
-        bpy.data.materials[f"player_socks_{team_name}"].node_tree.nodes["ColorRamp"].color_ramp.elements[1].color = socks_hsva
-        bpy.data.materials[f"player_shoes_{team_name}"].node_tree.nodes["ColorRamp"].color_ramp.elements[1].color = shoes_hsva
+        bpy.data.materials[f"player_shirt_{team_name}"].node_tree.nodes["ColorRamp"].color_ramp.elements[1].color = hsva_to_rgba(shirt_hsva)
+        bpy.data.materials[f"player_shorts_{team_name}"].node_tree.nodes["ColorRamp"].color_ramp.elements[1].color = hsva_to_rgba(shorts_hsva)
+        bpy.data.materials[f"player_socks_{team_name}"].node_tree.nodes["ColorRamp"].color_ramp.elements[1].color = hsva_to_rgba(socks_hsva)
+        bpy.data.materials[f"player_shoes_{team_name}"].node_tree.nodes["ColorRamp"].color_ramp.elements[1].color = hsva_to_rgba(shoes_hsva)
         bpy.data.materials[f"player_body_{team_name}"].node_tree.nodes["Hue Saturation Value"].inputs[0].default_value = body_hsv[0]
         bpy.data.materials[f"player_body_{team_name}"].node_tree.nodes["Hue Saturation Value"].inputs[1].default_value = body_hsv[1]
         bpy.data.materials[f"player_body_{team_name}"].node_tree.nodes["Hue Saturation Value"].inputs[2].default_value = body_hsv[2]
@@ -327,30 +361,42 @@ class TakeRenderedImages(bpy.types.Operator):
 
             shoe_mesh_name = next(obj.name for obj in bpy.data.collections[new_collection_name].all_objects if "Shoes" in obj.name)
             wanted_position = np.random.uniform(
-                [-0.5*self.FIELD_X_BOUNDS, -0.5*self.FIELD_Y_BOUNDS],
-                [0.5*self.FIELD_X_BOUNDS, 0.5*self.FIELD_Y_BOUNDS],
+                [-0.5*self.FIELD_X_BOUNDS, -0.5*self.FIELD_Y_BOUNDS, -0.05],
+                [0.5*self.FIELD_X_BOUNDS, 0.5*self.FIELD_Y_BOUNDS, -0.05],
             )
-            current_position = np.array(bpy.data.objects[shoe_mesh_name].matrix_world.translation[:2])
+            # current_position = np.array(bpy.data.objects[shoe_mesh_name].matrix_world.translation[:2])
+            current_position = np.array(bpy.data.objects[shoe_mesh_name].matrix_world.translation)
             translation = wanted_position - current_position
             print(f"{team_name}[{i}]: ({shoe_mesh_name}): player is at {current_position}, wanted at {wanted_position}: {translation}")
             bpy.ops.transform.translate(value=(translation[0], 0, 0), orient_axis_ortho="X", **translate_kwargs)
             bpy.ops.transform.translate(value=(0, translation[1], 0), orient_axis_ortho="Y", **translate_kwargs)
+            bpy.ops.transform.translate(value=(0, 0, translation[2]), orient_axis_ortho="Z", **translate_kwargs)
 
             created_collection_names.append(new_collection_name)
         return created_collection_names
 
     def _sample_camera_looking_at_ball(self, args: GenerationSettings, ball_loc: np.ndarray):
         camera_loc = np.random.uniform(
-            [-self.FIELD_X_BOUNDS * 0.5, -self.FIELD_Y_BOUNDS * 0.5, args.camera_min_z],
-            [self.FIELD_X_BOUNDS * 0.5, -self.FIELD_Y_BOUNDS * 0.5, args.camera_max_z],
+            [-self.FIELD_X_BOUNDS * 0.1, -self.FIELD_Y_BOUNDS * 0.8, args.camera_min_z],
+            [self.FIELD_X_BOUNDS * 0.1, -self.FIELD_Y_BOUNDS * 0.5, args.camera_max_z],
         )
-        camera_ball = ball_loc - camera_loc
+        look_loc = np.array([
+            ball_loc[0],
+            np.random.uniform(-self.FIELD_Y_BOUNDS * 0.3, -self.FIELD_Y_BOUNDS * 0.2),
+            np.random.uniform(0.0, 1.0),
+        ])
+        bpy.data.objects["camera_look_point"].location = look_loc
+        bpy.data.cameras["Camera"].lens = np.random.uniform(args.focal_len_min, args.focal_len_max)
+
+        camera_ball = look_loc - camera_loc
         rot_quat = mathutils.Vector(camera_ball).to_track_quat("-Z", "Y")
         rot_euler = rot_quat.to_euler()
         cam_angle_noise = 5 * np.pi / 180
         rot_euler += np.random.uniform(
-            [-cam_angle_noise, -cam_angle_noise, -cam_angle_noise],
-            [cam_angle_noise, cam_angle_noise, cam_angle_noise],
+            # [-cam_angle_noise, -cam_angle_noise, -cam_angle_noise],
+            # [cam_angle_noise, cam_angle_noise, cam_angle_noise],
+            [-cam_angle_noise, 0.0, 0.0],
+            [cam_angle_noise, 0.0, 0.0],
         )
         bpy.data.objects["Camera"].location = camera_loc
         bpy.data.objects["Camera"].rotation_euler = rot_euler
@@ -449,6 +495,7 @@ class GenerateDataPanel(bpy.types.Panel):
             "min_field_val", "max_field_val",
             "shade_chance", "shade_min", "shade_max",
             "camera_min_z", "camera_max_z",
+            "focal_len_min", "focal_len_max",
             "SEP",
             "save_dir", "save_format",
             "images_per_config", "n_images",
